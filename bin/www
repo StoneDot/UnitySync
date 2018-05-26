@@ -4,6 +4,7 @@
  * Module dependencies.
  */
 
+var util = require('util');
 var app = require('../app');
 var debug = require('debug')('unitysync:server');
 var WebSocketServer = require('websocket').server;
@@ -46,6 +47,8 @@ function originIsAllowed(origin) {
   return true;
 }
 
+var rooms = {};
+
 wsServer.on('request', function(request) {
   console.log('Request come!');
   if(!originIsAllowed(request.origin)) {
@@ -55,10 +58,22 @@ wsServer.on('request', function(request) {
   }
 
   var connection = request.accept(null, request.origin);
-  console.log((new Date()) + ' Connection accepted.');
+  var guid =  "";
+  var joinedRooms = [];
   connection.on('message', function(message) {
     if(message.type === 'utf8') {
       console.log('Received Message: ' + message.utf8Data);
+      var jsonObject = JSON.parse(message.utf8Data);
+      if(jsonObject.Mode === 'EnterRoom') {
+        guid = jsonObject.Guid;
+        var roomName = jsonObject.RoomName;
+        joinedRooms.push(roomName);
+        if(rooms[roomName] == null) {
+          rooms[roomName] = {};
+        }
+        rooms[roomName][guid] = connection;
+        console.log(util.format("User(%s) is entered room(%s)", guid, roomName));
+      }
     }
     else if(message.type === 'binary') {
       console.log('Received Binary Message of ' + message.binaryData.length + ' bytes');
@@ -66,6 +81,10 @@ wsServer.on('request', function(request) {
     }
   });
   connection.on('close', function(reasonCode, description) {
+    joinedRooms.forEach(function(roomName) {
+      delete rooms[roomName][guid];
+      console.log(util.format("Wipped User(%s) from room(%s)", guid, roomName));
+    });
     console.log((new Date()) + ' Peer ' + connection.remoteAddress + ' disconnected.');
   });
 });
