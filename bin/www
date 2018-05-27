@@ -4,11 +4,12 @@
  * Module dependencies.
  */
 
-var util = require('util');
-var app = require('../app');
-var debug = require('debug')('unitysync:server');
-var WebSocketServer = require('websocket').server;
-var http = require('http');
+const util = require('util');
+const uuidv4 = require('uuid/v4');
+const app = require('../app');
+const debug = require('debug')('unitysync:server');
+const WebSocketServer = require('websocket').server;
+const http = require('http');
 
 
 /**
@@ -23,7 +24,7 @@ app.set('port', port);
  */
 
 // var server = http.createServer(app);
-var server = http.createServer(function(request, response) {
+var server = http.createServer(function (request, response) {
   console.log((new Date()) + ' Received request for ' + request.url);
   response.writeHead(404);
   response.end();
@@ -47,41 +48,56 @@ function originIsAllowed(origin) {
   return true;
 }
 
+// rooms[roomName] saves user joined in the roomName as associative array
 var rooms = {};
 
-wsServer.on('request', function(request) {
+wsServer.on('request', function (request) {
   console.log('Request come!');
-  if(!originIsAllowed(request.origin)) {
+  if (!originIsAllowed(request.origin)) {
     request.reject();
     debug((new Date()) + ' Connection from origin ' + request.origin + ' rejected.');
     return;
   }
 
   var connection = request.accept(null, request.origin);
-  var guid =  "";
+
+  // Connected user guid
+  var guid = uuidv4();
+  // Latest entered room is active room
+  var activeRoom = "";
+  // Already joined rooms whose people receive messages in the rooms.
+  // If you have entered a room once time, Unity Sync remember it until you request.
   var joinedRooms = [];
-  connection.on('message', function(message) {
-    if(message.type === 'utf8') {
+
+  connection.on('message', function (message) {
+    if (message.type === 'utf8') {
       console.log('Received Message: ' + message.utf8Data);
       var jsonObject = JSON.parse(message.utf8Data);
-      if(jsonObject.Mode === 'EnterRoom') {
-        guid = jsonObject.Guid;
-        var roomName = jsonObject.RoomName;
+      if (jsonObject['Mode'] === 'EnterRoom') {
+        // Entering message handle
+        var roomName = activeRoom = jsonObject['RoomName'];
         joinedRooms.push(roomName);
-        if(rooms[roomName] == null) {
+        if (rooms[roomName] == null) {
           rooms[roomName] = {};
         }
         rooms[roomName][guid] = connection;
         console.log(util.format("User(%s) is entered room(%s)", guid, roomName));
+      } else {
+        // In the case of general message, just broadcast
+        for(var g in rooms[activeRoom]) {
+          var con = rooms[activeRoom][g];
+          console.log('Unicast to ' + con.remoteAddress);
+          con.sendUTF(message.utf8Data);
+        }
       }
     }
-    else if(message.type === 'binary') {
+    else if (message.type === 'binary') {
       console.log('Received Binary Message of ' + message.binaryData.length + ' bytes');
       connection.sendBytes(message.binaryData);
     }
   });
-  connection.on('close', function(reasonCode, description) {
-    joinedRooms.forEach(function(roomName) {
+  connection.on('close', function (reasonCode, description) {
+    joinedRooms.forEach(function (roomName) {
       delete rooms[roomName][guid];
       console.log(util.format("Wipped User(%s) from room(%s)", guid, roomName));
     });
