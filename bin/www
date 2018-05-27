@@ -71,7 +71,7 @@ wsServer.on('request', function (request) {
 
   connection.on('message', function (message) {
     if (message.type === 'utf8') {
-      console.log('Received Message: ' + message.utf8Data);
+      //console.log('Received Message: ' + message.utf8Data);
       var jsonObject = JSON.parse(message.utf8Data);
       if (jsonObject['Mode'] === 'EnterRoom') {
         // Entering message handle
@@ -86,7 +86,7 @@ wsServer.on('request', function (request) {
         // In the case of general message, just broadcast
         for(var g in rooms[activeRoom]) {
           var con = rooms[activeRoom][g];
-          console.log('Unicast to ' + con.remoteAddress);
+          //console.log('Unicast to ' + con.remoteAddress);
           con.sendUTF(message.utf8Data);
         }
       }
